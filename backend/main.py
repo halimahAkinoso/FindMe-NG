@@ -74,17 +74,13 @@ def normalize_postcode(value: str) -> str:
 
 def postcode_format_is_valid(value: str) -> bool:
     """
-    Check the documented postcode segment format after
-    removing spaces and hyphens. Numeric segments are 01–99.
+    Check the documented 11-character alphanumeric postcode form
+    after removing spaces and hyphens.
 
     This checks format only, not official existence.
     """
     normalized = normalize_postcode(value)
-    pattern = (
-        r"[A-Z]{2}(?:0[1-9]|[1-9][0-9])"
-        r"[A-Z0-9]{3}[A-Z]{2}(?:0[1-9]|[1-9][0-9])"
-    )
-    return bool(re.fullmatch(pattern, normalized))
+    return bool(re.fullmatch(r"[A-Z0-9]{11}", normalized))
 
 
 def validate_postcode_input(value: str) -> str:
@@ -96,8 +92,8 @@ def validate_postcode_input(value: str) -> str:
 
     if not postcode_format_is_valid(normalized):
         raise ValueError(
-            "Enter a postcode in the format AA-99-H77-BB-55. "
-            "Spaces and hyphens are allowed; numeric segments must be 01–99."
+            "Enter an 11-character alphanumeric postcode. "
+            "Spaces and hyphens are allowed."
         )
 
     return normalized
@@ -164,7 +160,7 @@ def get_db():
 
 class PostcodeRequest(BaseModel):
     # Allow spaces and hyphens in formatted input.
-    postcode: str = Field(min_length=1, max_length=20)
+    postcode: str = Field(min_length=1, max_length=32)
 
     @field_validator("postcode")
     @classmethod
@@ -175,7 +171,7 @@ class PostcodeRequest(BaseModel):
 class DeliveryCreate(BaseModel):
     customer_name: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=7, max_length=20)
-    postcode: str = Field(min_length=1, max_length=20)
+    postcode: str = Field(min_length=1, max_length=32)
     state: str = Field(min_length=2, max_length=80)
     lga: str = Field(min_length=2, max_length=100)
     town: str = Field(min_length=2, max_length=100)

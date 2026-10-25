@@ -131,7 +131,10 @@ export default function App() {
         result.verified === true &&
         result.valid === false
       ) {
-        setError("The official service did not find this postcode.");
+        setError(
+          result.message ||
+          "The official service did not find this postcode."
+        );
       } else {
         setNotice(
           result.message || "Postcode response received."
@@ -274,7 +277,7 @@ export default function App() {
                     onChange={changeField}
                     placeholder={placeholder}
                     required
-                    maxLength={name === "postcode" ? 20 : 200}
+                    maxLength={name === "postcode" ? 32 : 200}
                     autoComplete={name === "phone" ? "tel" : "off"}
                     aria-describedby={
                       name === "postcode" ? "postcode-help" : undefined

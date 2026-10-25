@@ -64,7 +64,7 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
         )
 
     async def test_endpoint_normalizes_and_maps_documented_level_one_data(self):
-        request = main.PostcodeRequest(postcode=" ek 01-a03 fk 01 ")
+        request = main.PostcodeRequest(postcode=" OG 10 A16 BN 15 ")
         with patch.object(
             main,
             "request_lookup",
@@ -73,7 +73,7 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     200,
                     json={
                         "data": {
-                            "postcode": "EK-01-A03-FK-01",
+                            "postcode": "OG 10 A16 BN 15",
                             "valid": True,
                         }
                     },
@@ -82,15 +82,25 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
         ) as lookup:
             result = await main.validate_postcode_endpoint(request)
 
-        self.assertEqual(lookup.await_args.kwargs["postcode"], "EK01A03FK01")
+        self.assertEqual(lookup.await_args.kwargs["postcode"], "OG10A16BN15")
         self.assertEqual(result["valid"], True)
         self.assertTrue(result["verified"])
-        self.assertEqual(result["postcode"], "EK-01-A03-FK-01")
+        self.assertEqual(result["postcode"], "OG 10 A16 BN 15")
         self.assertNotIn("raw_response", result)
+
+    def test_accepts_11_character_codes_without_assuming_example_grouping(self):
+        request = main.PostcodeRequest(postcode="A1-B2 C3-D4 E5F")
+
+        self.assertEqual(request.postcode, "A1B2C3D4E5F")
+
+    def test_accepts_complete_code_with_a_separator_between_each_character(self):
+        request = main.PostcodeRequest(postcode="A-1 B-2 C-3 D-4 E-5 F")
+
+        self.assertEqual(request.postcode, "A1B2C3D4E5F")
 
     async def test_invalid_postcode_is_rejected_before_lookup(self):
         with self.assertRaises(ValidationError):
-            main.PostcodeRequest(postcode="EK-00-A03-FK-01")
+            main.PostcodeRequest(postcode="EK-01-A03-FK")
 
     async def test_authentication_errors_are_sanitized(self):
         for status in (401, 403):
