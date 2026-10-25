@@ -108,16 +108,20 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn("test-key", raised.exception.detail)
 
     async def test_timeout_and_upstream_server_error_are_sanitized(self):
-        with patch.object(
-            main,
-            "request_lookup",
-            new=AsyncMock(side_effect=httpx.TimeoutException("timed out")),
-        ):
-            with self.assertRaises(HTTPException) as raised:
-                await main.validate_postcode_endpoint(
-                    main.PostcodeRequest(postcode="EK-01-A03-FK-01")
-                )
+        with self.assertLogs("backend.main", level="WARNING") as captured:
+            with patch.object(
+                main,
+                "request_lookup",
+                new=AsyncMock(side_effect=httpx.TimeoutException("timed out")),
+            ):
+                with self.assertRaises(HTTPException) as raised:
+                    await main.validate_postcode_endpoint(
+                        main.PostcodeRequest(postcode="EK-01-A03-FK-01")
+                    )
         self.assertEqual(raised.exception.status_code, 504)
+        self.assertIn("status=unavailable category=timeout", captured.output[0])
+        self.assertNotIn("EK01A03FK01", captured.output[0])
+        self.assertNotIn("test-key", captured.output[0])
 
         with patch.object(
             main,
@@ -129,6 +133,70 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     main.PostcodeRequest(postcode="EK-01-A03-FK-01")
                 )
         self.assertEqual(raised.exception.status_code, 502)
+
+    async def test_diagnostic_categories_only_mark_explicit_false_as_invalid(self):
+        request = main.PostcodeRequest(postcode="EK-01-A03-FK-01")
+        cases = (
+            (
+                httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "postcode": "EK-01-A03-FK-01",
+                            "valid": False,
+                        }
+                    },
+                ),
+                "status=200 category=lookup_invalid",
+                False,
+            ),
+            (
+                httpx.Response(403),
+                "status=403 category=auth_error",
+                True,
+            ),
+            (
+                httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "postcode": "EK-01-A03-FK-01",
+                            "valid": "false",
+                        },
+                        "sensitive_marker": "NO_LOG_RAW_BODY",
+                    },
+                ),
+                "status=200 category=unexpected_response",
+                True,
+            ),
+            (
+                httpx.Response(502),
+                "status=502 category=upstream_error",
+                True,
+            ),
+        )
+
+        for response, expected_log, expect_error in cases:
+            with self.subTest(expected_log=expected_log):
+                with self.assertLogs("backend.main", level="INFO") as captured:
+                    with patch.object(
+                        main,
+                        "request_lookup",
+                        new=AsyncMock(return_value=response),
+                    ):
+                        if expect_error:
+                            with self.assertRaises(HTTPException):
+                                await main.validate_postcode_endpoint(request)
+                        else:
+                            result = await main.validate_postcode_endpoint(request)
+                            self.assertIs(result["valid"], False)
+
+                log_text = "\n".join(captured.output)
+                self.assertIn(expected_log, log_text)
+                self.assertNotIn("EK01A03FK01", log_text)
+                self.assertNotIn("test-key", log_text)
+                self.assertNotIn("customer_name_marker", log_text)
+                self.assertNotIn("NO_LOG_RAW_BODY", log_text)
 
     def test_delivery_endpoints_remain_registered(self):
         paths = {route.path for route in main.app.routes}

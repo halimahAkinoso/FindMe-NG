@@ -1,4 +1,5 @@
 
+import logging
 import os
 import re
 import uuid
@@ -44,6 +45,7 @@ NIPOST_API_BASE_URL = os.getenv(
     "NIPOST_API_BASE_URL", "https://api.postcode.gov.ng"
 ).rstrip("/")
 NIPOST_API_KEY = os.getenv("NIPOST_API_KEY", "")
+logger = logging.getLogger(__name__)
 
 engine = create_engine(
     DATABASE_URL,
@@ -242,6 +244,15 @@ def health():
 # POSTCODE VALIDATION
 # --------------------------------------------------
 
+def log_nipost_diagnostic(status: Optional[int], category: str) -> None:
+    safe_status = status if status is not None else "unavailable"
+    message = "NIPOST lookup status=%s category=%s"
+    if category == "lookup_valid":
+        logger.info(message, safe_status, category)
+    else:
+        logger.warning(message, safe_status, category)
+
+
 @app.post("/api/postcodes/validate")
 async def validate_postcode_endpoint(
     payload: PostcodeRequest,
@@ -263,6 +274,7 @@ async def validate_postcode_endpoint(
         }
 
     if not NIPOST_API_BASE_URL or not NIPOST_API_KEY:
+        log_nipost_diagnostic(None, "upstream_error")
         raise HTTPException(
             status_code=503,
             detail="Official postcode API is not configured.",
@@ -275,29 +287,34 @@ async def validate_postcode_endpoint(
             api_key=NIPOST_API_KEY,
         )
     except httpx.TimeoutException:
+        log_nipost_diagnostic(None, "timeout")
         raise HTTPException(
             status_code=504,
             detail="NIPOST request timed out.",
         )
     except httpx.RequestError:
+        log_nipost_diagnostic(None, "upstream_error")
         raise HTTPException(
             status_code=502,
             detail="Could not reach NIPOST.",
         )
 
     if response.status_code in (401, 403):
+        log_nipost_diagnostic(response.status_code, "auth_error")
         raise HTTPException(
             status_code=502,
             detail="Official postcode verification is unavailable.",
         )
 
     if response.status_code in (402, 429):
+        log_nipost_diagnostic(response.status_code, "upstream_error")
         raise HTTPException(
             status_code=503,
             detail="Official postcode verification is temporarily unavailable.",
         )
 
     if response.status_code >= 400 or not response.is_success:
+        log_nipost_diagnostic(response.status_code, "upstream_error")
         raise HTTPException(
             status_code=502,
             detail="Official postcode verification is unavailable.",
@@ -306,6 +323,7 @@ async def validate_postcode_endpoint(
     try:
         data = response.json()
     except ValueError:
+        log_nipost_diagnostic(response.status_code, "unexpected_response")
         raise HTTPException(
             status_code=502,
             detail="NIPOST returned an unexpected response.",
@@ -317,12 +335,17 @@ async def validate_postcode_endpoint(
         or not isinstance(data.get("postcode"), str)
         or not isinstance(data.get("valid"), bool)
     ):
+        log_nipost_diagnostic(response.status_code, "unexpected_response")
         raise HTTPException(
             status_code=502,
             detail="Official postcode service returned an unexpected response.",
         )
 
     is_valid = data["valid"]
+    log_nipost_diagnostic(
+        response.status_code,
+        "lookup_valid" if is_valid else "lookup_invalid",
+    )
     return {
         "postcode": data["postcode"],
         "valid": is_valid,
