@@ -4,9 +4,11 @@ import re
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
+from pathlib import Path
 from typing import Optional
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -21,6 +23,14 @@ from sqlalchemy.orm import (
 # CONFIGURATION
 # --------------------------------------------------
 
+if os.getenv("RENDER", "").lower() != "true":
+    load_dotenv(Path(__file__).with_name(".env"), override=False)
+
+try:
+    from .nipost import request_lookup
+except ImportError:
+    from nipost import request_lookup
+
 DATABASE_URL = os.getenv(
     "DATABASE_URL", "sqlite:///./findme.db"
 )
@@ -31,10 +41,9 @@ NIPOST_MOCK_MODE = (
     os.getenv("NIPOST_MOCK_MODE", "true").lower() == "true"
 )
 NIPOST_API_BASE_URL = os.getenv(
-    "NIPOST_API_BASE_URL", ""
+    "NIPOST_API_BASE_URL", "https://api.postcode.gov.ng"
 ).rstrip("/")
 NIPOST_API_KEY = os.getenv("NIPOST_API_KEY", "")
-NIPOST_LOOKUP_PATH = os.getenv("NIPOST_LOOKUP_PATH", "")
 
 engine = create_engine(
     DATABASE_URL,
@@ -63,13 +72,17 @@ def normalize_postcode(value: str) -> str:
 
 def postcode_format_is_valid(value: str) -> bool:
     """
-    Check for exactly 11 alphanumeric characters
-    after removing spaces and hyphens.
+    Check the documented postcode segment format after
+    removing spaces and hyphens. Numeric segments are 01–99.
 
     This checks format only, not official existence.
     """
     normalized = normalize_postcode(value)
-    return bool(re.fullmatch(r"[A-Z0-9]{11}", normalized))
+    pattern = (
+        r"[A-Z]{2}(?:0[1-9]|[1-9][0-9])"
+        r"[A-Z0-9]{3}[A-Z]{2}(?:0[1-9]|[1-9][0-9])"
+    )
+    return bool(re.fullmatch(pattern, normalized))
 
 
 def validate_postcode_input(value: str) -> str:
@@ -81,8 +94,8 @@ def validate_postcode_input(value: str) -> str:
 
     if not postcode_format_is_valid(normalized):
         raise ValueError(
-            "Enter a postcode containing exactly 11 "
-            "letters or digits. Spaces and hyphens are allowed."
+            "Enter a postcode in the format AA-99-H77-BB-55. "
+            "Spaces and hyphens are allowed; numeric segments must be 01–99."
         )
 
     return normalized
@@ -249,31 +262,18 @@ async def validate_postcode_endpoint(
             "location": None,
         }
 
-    if not all([
-        NIPOST_API_BASE_URL,
-        NIPOST_API_KEY,
-        NIPOST_LOOKUP_PATH,
-    ]):
+    if not NIPOST_API_BASE_URL or not NIPOST_API_KEY:
         raise HTTPException(
             status_code=503,
             detail="Official postcode API is not configured.",
         )
 
-    url = (
-        f"{NIPOST_API_BASE_URL}/"
-        f"{NIPOST_LOOKUP_PATH.lstrip('/')}"
-    )
-
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            response = await client.get(
-                url,
-                params={"postcode": postcode},
-                headers={
-                    "Authorization": f"Bearer {NIPOST_API_KEY}",
-                    "Accept": "application/json",
-                },
-            )
+        response = await request_lookup(
+            base_url=NIPOST_API_BASE_URL,
+            postcode=postcode,
+            api_key=NIPOST_API_KEY,
+        )
     except httpx.TimeoutException:
         raise HTTPException(
             status_code=504,
@@ -288,29 +288,19 @@ async def validate_postcode_endpoint(
     if response.status_code in (401, 403):
         raise HTTPException(
             status_code=502,
-            detail="NIPOST rejected the credentials or permissions.",
+            detail="Official postcode verification is unavailable.",
         )
 
-    if response.status_code == 404:
-        return {
-            "postcode": postcode,
-            "valid": False,
-            "verified": True,
-            "mode": "official",
-            "message": "The official service did not find this postcode.",
-            "location": None,
-        }
-
-    if response.status_code == 429:
+    if response.status_code in (402, 429):
         raise HTTPException(
             status_code=503,
-            detail="NIPOST rate limit reached. Try again later.",
+            detail="Official postcode verification is temporarily unavailable.",
         )
 
-    if response.status_code >= 400:
+    if response.status_code >= 400 or not response.is_success:
         raise HTTPException(
             status_code=502,
-            detail=f"NIPOST returned HTTP {response.status_code}.",
+            detail="Official postcode verification is unavailable.",
         )
 
     try:
@@ -321,17 +311,25 @@ async def validate_postcode_endpoint(
             detail="NIPOST returned an unexpected response.",
         )
 
-    # Map this response to verified/valid/location after
-    # confirming the actual response schema in NIPOST docs.
+    data = data.get("data") if isinstance(data, dict) else None
+    if (
+        not isinstance(data, dict)
+        or not isinstance(data.get("postcode"), str)
+        or not isinstance(data.get("valid"), bool)
+    ):
+        raise HTTPException(
+            status_code=502,
+            detail="Official postcode service returned an unexpected response.",
+        )
+
+    is_valid = data["valid"]
     return {
-        "postcode": postcode,
-        "valid": None,
-        "verified": False,
-        "mode": "official_unmapped",
-        "message": (
-            "Response received. Official response mapping is required."
-        ),
-        "raw_response": data,
+        "postcode": data["postcode"],
+        "valid": is_valid,
+        "verified": True,
+        "mode": "official",
+        "message": "Postcode verified." if is_valid else "Postcode not found.",
+        "location": None,
     }
 
 
