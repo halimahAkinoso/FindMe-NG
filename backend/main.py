@@ -36,13 +36,19 @@ DATABASE_URL = os.getenv(
     "DATABASE_URL", "sqlite:///./findme.db"
 )
 FRONTEND_ORIGIN = os.getenv(
-    "FRONTEND_ORIGIN", "http://localhost:5173"
+    "FRONTEND_ORIGIN",
+    "http://localhost:5173,https://findme-ng-frontend.onrender.com",
 )
+frontend_origins = [
+    origin.strip().rstrip("/")
+    for origin in FRONTEND_ORIGIN.split(",")
+    if origin.strip()
+]
 NIPOST_MOCK_MODE = (
     os.getenv("NIPOST_MOCK_MODE", "true").lower() == "true"
 )
-NIPOST_API_BASE_URL = os.getenv(
-    "NIPOST_API_BASE_URL", "https://api.postcode.gov.ng"
+NIPOST_API_BASE_URL = (
+    os.getenv("NIPOST_API_BASE_URL") or "https://api.postcode.gov.ng"
 ).rstrip("/")
 NIPOST_API_KEY = os.getenv("NIPOST_API_KEY", "")
 logger = logging.getLogger(__name__)
@@ -124,7 +130,7 @@ class Delivery(Base):
     )
     customer_name: Mapped[str] = mapped_column(String(120))
     phone: Mapped[str] = mapped_column(String(20))
-    postcode: Mapped[str] = mapped_column(String(11))
+    postcode: Mapped[str] = mapped_column(String(32))
     state: Mapped[str] = mapped_column(String(80))
     lga: Mapped[str] = mapped_column(String(100))
     town: Mapped[str] = mapped_column(String(100))
@@ -224,7 +230,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[FRONTEND_ORIGIN],
+    allow_origins=frontend_origins,
     allow_credentials=False,
     allow_methods=["GET", "POST", "PATCH"],
     allow_headers=["Content-Type", "Authorization"],

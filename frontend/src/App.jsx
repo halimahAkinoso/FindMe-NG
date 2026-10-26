@@ -131,13 +131,12 @@ export default function App() {
         result.verified === true &&
         result.valid === false
       ) {
-        setError(
-          result.message ||
-          "The official service did not find this postcode."
+        setNotice(
+          "Official lookup completed: postcode was not found in the NIPOST registry."
         );
       } else {
         setNotice(
-          result.message || "Postcode response received."
+          result.message || "Postcode verified successfully."
         );
       }
     } catch (err) {
@@ -322,14 +321,37 @@ export default function App() {
             </button>
 
             {postcodeResult && (
-              <div className="postcode-result">
-                <strong>
-                  {postcodeResult.mode === "mock"
-                    ? "Local test result"
-                    : postcodeResult.mode === "official"
-                      ? "Official service result"
-                      : "Verification status"}
-                </strong>
+              <div
+                className={`postcode-result ${
+                  postcodeResult.mode === "mock"
+                    ? "mock"
+                    : postcodeResult.valid
+                    ? "valid"
+                    : "invalid"
+                }`}
+              >
+                <div className="postcode-result-header">
+                  <strong>
+                    {postcodeResult.mode === "mock"
+                      ? "Local test result"
+                      : "Official service result"}
+                  </strong>
+                  <span
+                    className={`status-pill ${
+                      postcodeResult.mode === "mock"
+                        ? "mock"
+                        : postcodeResult.valid
+                        ? "valid"
+                        : "invalid"
+                    }`}
+                  >
+                    {postcodeResult.mode === "mock"
+                      ? "Unverified mock"
+                      : postcodeResult.valid
+                      ? "Verified"
+                      : "Not found"}
+                  </span>
+                </div>
 
                 <p>{postcodeResult.message}</p>
 

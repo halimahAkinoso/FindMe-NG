@@ -1,4 +1,3 @@
-
 :root {
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   color: #18251f;
@@ -103,8 +102,18 @@ input:focus, textarea:focus, select:focus {
 .submit-button { display: flex; width: 100%; padding: 14px; }
 
 .alert, .postcode-result { margin: 16px 0; padding: 13px 15px; border-radius: 10px; font-size: 13px; }
-.alert.error { background: #fff0ed; color: #a33123; }
-.alert.info, .postcode-result { background: #edf7f0; color: #21573b; }
+.alert.error { background: #fff0ed; color: #a33123; border: 1px solid #f9d5ce; }
+.alert.info { background: #edf7f0; color: #21573b; border: 1px solid #d1ebd8; }
+
+.postcode-result { background: #f6f8f6; border: 1px solid #e1e9e2; }
+.postcode-result.valid { background: #edf7f0; color: #1e5a38; border: 1px solid #cbe6d4; }
+.postcode-result.invalid { background: #fff8eb; color: #8f5619; border: 1px solid #f6deb3; }
+.postcode-result.mock { background: #f0f4f8; color: #2c4a63; border: 1px solid #d4e0eb; }
+.postcode-result-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+.status-pill { display: inline-block; padding: 3px 8px; border-radius: 999px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+.status-pill.valid { background: #ddf5e6; color: #176b4a; }
+.status-pill.invalid { background: #fde8cb; color: #8f5619; }
+.status-pill.mock { background: #e2ecf5; color: #2c4a63; }
 .postcode-result p { margin-bottom: 0; line-height: 1.6; }
 .postcode-result pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 

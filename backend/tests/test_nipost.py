@@ -86,16 +86,41 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["valid"], True)
         self.assertTrue(result["verified"])
         self.assertEqual(result["postcode"], "OG 10 A16 BN 15")
+        self.assertEqual(result["message"], "Postcode verified.")
         self.assertNotIn("raw_response", result)
+
+    async def test_endpoint_maps_invalid_postcode_response(self):
+        request = main.PostcodeRequest(postcode="OG 10 A16 BN 15")
+        with patch.object(
+            main,
+            "request_lookup",
+            new=AsyncMock(
+                return_value=httpx.Response(
+                    200,
+                    json={
+                        "data": {
+                            "postcode": "OG 10 A16 BN 15",
+                            "valid": False,
+                        }
+                    },
+                )
+            ),
+        ) as lookup:
+            result = await main.validate_postcode_endpoint(request)
+
+        self.assertEqual(lookup.await_args.kwargs["postcode"], "OG10A16BN15")
+        self.assertEqual(result["valid"], False)
+        self.assertTrue(result["verified"])
+        self.assertEqual(result["mode"], "official")
+        self.assertEqual(result["message"], "Postcode not found.")
+        self.assertEqual(result["postcode"], "OG 10 A16 BN 15")
 
     def test_accepts_11_character_codes_without_assuming_example_grouping(self):
         request = main.PostcodeRequest(postcode="A1-B2 C3-D4 E5F")
-
         self.assertEqual(request.postcode, "A1B2C3D4E5F")
 
     def test_accepts_complete_code_with_a_separator_between_each_character(self):
         request = main.PostcodeRequest(postcode="A-1 B-2 C-3 D-4 E-5 F")
-
         self.assertEqual(request.postcode, "A1B2C3D4E5F")
 
     async def test_invalid_postcode_is_rejected_before_lookup(self):
@@ -143,6 +168,30 @@ class NipostIntegrationTests(unittest.IsolatedAsyncioTestCase):
                     main.PostcodeRequest(postcode="EK-01-A03-FK-01")
                 )
         self.assertEqual(raised.exception.status_code, 502)
+
+    async def test_unexpected_response_structures_raise_diagnostic_error(self):
+        request = main.PostcodeRequest(postcode="EK-01-A03-FK-01")
+        invalid_cases = (
+            ("non-json", httpx.Response(200, text="<html>Gateway Error</html>")),
+            ("missing-data", httpx.Response(200, json={"success": True})),
+            ("data-not-dict", httpx.Response(200, json={"data": ["invalid"]})),
+            ("missing-postcode", httpx.Response(200, json={"data": {"valid": True}})),
+            ("missing-valid", httpx.Response(200, json={"data": {"postcode": "EK-01-A03-FK-01"}})),
+            ("valid-not-bool", httpx.Response(200, json={"data": {"postcode": "EK-01-A03-FK-01", "valid": "false"}})),
+        )
+
+        for case_name, response in invalid_cases:
+            with self.subTest(case=case_name):
+                with patch.object(
+                    main,
+                    "request_lookup",
+                    new=AsyncMock(return_value=response),
+                ):
+                    with self.assertRaises(HTTPException) as raised:
+                        await main.validate_postcode_endpoint(request)
+
+                    self.assertEqual(raised.exception.status_code, 502)
+                    self.assertNotIn("not found", raised.exception.detail.lower())
 
     async def test_diagnostic_categories_only_mark_explicit_false_as_invalid(self):
         request = main.PostcodeRequest(postcode="EK-01-A03-FK-01")
