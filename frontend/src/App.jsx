@@ -355,6 +355,24 @@ export default function App() {
 
                 <p>{postcodeResult.message}</p>
 
+                {postcodeResult.mode === "official" &&
+                  postcodeResult.verified === true &&
+                  postcodeResult.valid === false && (
+                    <p className="postcode-next-step">
+                      NIPOST completed the lookup but did not find this code.
+                      Check the complete building postcode with the{" "}
+                      <a
+                        href="https://postcode.gov.ng/"
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        official NIPOST postcode finder
+                      </a>
+                      . You can still save this delivery; it will be marked
+                      unverified.
+                    </p>
+                  )}
+
                 {postcodeResult.location && (
                   <pre>
                     {JSON.stringify(
@@ -433,6 +451,16 @@ export default function App() {
 
                   <p className="muted">
                     {record.lga}, {record.state} · {record.postcode}
+                  </p>
+
+                  <p
+                    className={`record-postcode-status ${
+                      record.postcode_verified ? "verified" : "unverified"
+                    }`}
+                  >
+                    {record.postcode_verified
+                      ? "NIPOST verified"
+                      : "Postcode not verified"}
                   </p>
 
                   <p><b>Landmark:</b> {record.landmark}</p>

@@ -115,6 +115,8 @@ input:focus, textarea:focus, select:focus {
 .status-pill.invalid { background: #fde8cb; color: #8f5619; }
 .status-pill.mock { background: #e2ecf5; color: #2c4a63; }
 .postcode-result p { margin-bottom: 0; line-height: 1.6; }
+.postcode-next-step { margin-top: 8px; font-size: 12px; }
+.postcode-next-step a { color: inherit; font-weight: 700; text-decoration: underline; }
 .postcode-result pre { white-space: pre-wrap; overflow-wrap: anywhere; }
 
 .search-box { display: flex; align-items: center; gap: 10px; color: #718077; }
@@ -124,6 +126,9 @@ input:focus, textarea:focus, select:focus {
 .record { padding: 18px; border: 1px solid #e1e9e2; border-radius: 12px; }
 .record h3 { margin: 0 0 5px; }
 .record p { font-size: 13px; line-height: 1.5; margin: 8px 0; }
+.record-postcode-status { display: inline-block; padding: 4px 8px; border-radius: 999px; font-size: 11px !important; font-weight: 700; }
+.record-postcode-status.verified { background: #ddf5e6; color: #176b4a; }
+.record-postcode-status.unverified { background: #fde8cb; color: #8f5619; }
 .record-top { display: flex; justify-content: space-between; gap: 12px; }
 .record-ref { color: #6a7b70; font-size: 12px; }
 .status { border-radius: 20px; padding: 5px 9px; font-size: 11px; background: #edf0ed; height: fit-content; }
